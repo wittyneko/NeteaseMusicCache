@@ -1,9 +1,14 @@
+![展示](./show_01.webp)
+
 ### 功能
-- [x] 缓存转换 
+- [x] 缓存读取转换
+- [x] 记录转换历史 
 - [x] 写入歌曲信息
 - [ ] 写入歌词
 - [ ] 写入封面
 - [ ] 修改文件名
+
+没写存储权限申请😓就不写了
 
 ### 参考
 [用python从网易云音乐缓存文件中得到MP3](https://blog.csdn.net/marvellousbinary/article/details/79182946)

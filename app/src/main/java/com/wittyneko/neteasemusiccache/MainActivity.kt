@@ -75,12 +75,14 @@ class MainActivity : AppCompatActivity() {
             if (job.isActive) {
 
                 binding.btnDecrypt.text = "等待取消"
+                binding.btnDecrypt.isEnabled = false
                 Log.e(TAG, "cancel")
                 job.cancelAndJoin()
                 Log.e(TAG, "cancel join")
                 stop().join()
                 Log.e(TAG, "write join")
                 binding.btnDecrypt.text = "开始"
+                binding.btnDecrypt.isEnabled = true
             } else {
                 binding.btnDecrypt.text = "取消"
                 binding.tvProgress.text = ""
@@ -354,87 +356,6 @@ class MainActivity : AppCompatActivity() {
         Log.e(TAG, info)
         adapter.addData(info)
         binding.lvList.scrollToPosition(adapter.list.size - 1)
-    }
-
-    fun readMetadata(file: File) {
-
-        val retriever = MediaMetadataRetriever()
-        retriever.setDataSource(file.absolutePath)
-        val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
-        val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
-        val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
-        val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-        val pic = retriever.embeddedPicture
-        Log.e(TAG, "MediaMetadata: $title, $album, $artist")
-    }
-
-    fun testID3() = launch() {
-        val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-        Log.e(TAG, "music: ${musicDir.absolutePath}")
-        val list = musicDir.listFiles()
-        var flac: File? = null
-        var mp3: File? = null
-        Log.e(TAG, "size ${list.size}")
-        list.forEach {
-            Log.e(TAG, "name: ${it.name}")
-            if (it.name.endsWith(".tag.flac")) {
-                mp3 = it
-            } else
-                if (it.name.endsWith(".flac")) {
-                    flac = it
-                }
-        }
-        Log.e(TAG, "${flac?.absolutePath}\n${mp3?.absolutePath}")
-
-        val audio = AudioFileIO.read(mp3)
-        val header = audio.audioHeader
-        Log.e(TAG, "format: ${header.format}")
-        val tag = audio.tag as FlacTag
-        tag.fields.forEach {
-            Log.e(TAG, "tag: ${it.id}, $it")
-        }
-        tag.images.forEach {
-            Log.e(TAG, "img: $it")
-        }
-        tag.setField(FieldKey.TITLE, "可能世界论")
-        audio.commit()
-        Unit
-
-    }
-
-    fun readID3() {
-        var mp3: File? = null
-        val id3Bytes = mp3?.inputStream()?.use { input ->
-            val headBytes = input.readBytes(10)
-            Log.e(TAG, "head: ${headBytes.joinToString { Integer.toHexString(it.toInt()) }}")
-            val tag = String(headBytes.sliceArray(0..2))
-            val ver = headBytes[3]
-            Log.e(TAG, "tag: $tag, ver: $ver")
-            val size = headBytes.sliceArray(6..9).let {
-                ((it[0].toInt() and 0xff) shl 24) or
-                        ((it[1].toInt() and 0xff) shl 16) or
-                        ((it[2].toInt() and 0xff) shl 8) or
-                        (it[3].toInt())
-            }
-            size.also {
-                val hex = byteArrayOf(
-                        (it shr 24).and(0xff).toByte(),
-                        (it shl 16).and(0xff).toByte(),
-                        (it shr 8).and(0xff).toByte(),
-                        it.and(0xff).toByte()
-                ).joinToString { Integer.toHexString(it.toInt()) }
-                Log.e(TAG, "size: $size, hex: $hex")
-            }
-            val labelBypes = input.readBytes(size)
-            headBytes + labelBypes
-        }
-    }
-
-    @Suppress("NOTHING_TO_INLINE")
-    inline fun InputStream.readBytes(estimatedSize: Int = DEFAULT_BUFFER_SIZE): ByteArray {
-        val buffer = ByteArray(estimatedSize)
-        read(buffer)
-        return buffer
     }
 
     inline fun uiThread(crossinline block: () -> Unit) {
