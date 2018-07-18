@@ -1,3 +1,10 @@
+### 功能
+- [x] 缓存转换 
+- [x] 写入歌曲信息
+- [ ] 写入歌词
+- [ ] 写入封面
+- [ ] 修改文件名
+
 ### 参考
 [用python从网易云音乐缓存文件中得到MP3](https://blog.csdn.net/marvellousbinary/article/details/79182946)
 
