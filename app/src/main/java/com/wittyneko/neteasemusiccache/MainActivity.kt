@@ -2,7 +2,6 @@ package com.wittyneko.neteasemusiccache
 
 import android.databinding.DataBindingUtil
 import android.graphics.Color
-import android.media.MediaMetadataRetriever
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Environment
@@ -21,10 +20,9 @@ import kotlinx.coroutines.experimental.android.UI
 import okhttp3.OkHttpClient
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
-import org.jaudiotagger.tag.flac.FlacTag
-import org.jaudiotagger.tag.id3.AbstractID3v2Tag
 import org.jetbrains.anko.backgroundColor
 import org.jetbrains.anko.sdk25.coroutines.onClick
+import org.jetbrains.anko.textResource
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.*
@@ -48,7 +46,7 @@ class MainActivity : AppCompatActivity() {
 
     val suffixFlac = "flac"
     val flacFormat = byteArrayOf(0x66, 0x4C, 0x61, 0x43, 0x00, 0x00, 0x00, 0x22)
-    lateinit var job: Job
+    var decryptJob: Job? = null
 
     val apiRetrofit = Retrofit.Builder()
             .client(OkHttpClient.Builder()
@@ -70,29 +68,28 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_main)
         binding.lvList.adapter = adapter
-        binding.btnDecrypt.text = "取消"
-        binding.btnDecrypt.onClick {
-            if (job.isActive) {
 
-                binding.btnDecrypt.text = "等待取消"
+        binding.btnDecrypt.onClick {
+            if (decryptJob != null && decryptJob!!.isActive) {
+
+                binding.btnDecrypt.textResource = R.string.cancel_await
                 binding.btnDecrypt.isEnabled = false
                 Log.e(TAG, "cancel")
-                job.cancelAndJoin()
+                decryptJob?.cancelAndJoin()
                 Log.e(TAG, "cancel join")
-                stop().join()
+                decryptStop().join()
                 Log.e(TAG, "write join")
-                binding.btnDecrypt.text = "开始"
+                binding.btnDecrypt.textResource = R.string.decrypt
                 binding.btnDecrypt.isEnabled = true
             } else {
-                binding.btnDecrypt.text = "取消"
                 binding.tvProgress.text = ""
                 adapter.clear()
-                launch()
+                decryptLaunch()
             }
         }
         init()
 
-        launch()
+        //decryptLaunch()
     }
 
     fun init() {
@@ -114,7 +111,7 @@ class MainActivity : AppCompatActivity() {
                 "${cacheFile.absolutePath}")
     }
 
-    fun stop() = async {
+    fun decryptStop() = async {
         cacheFile.outputStream().use {
             val output = BufferedOutputStream(it)
             cacheMap.forEach { key, value ->
@@ -124,7 +121,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun launch() = launch(UI) {
+    fun decryptLaunch() = launch(UI) {
+        binding.btnDecrypt.textResource = R.string.cancel
         val pool = newSingleThreadContext("single-pool")
         // 获取已解析列表
         async {
@@ -190,16 +188,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 showInfo("------------------------").join()
             }
-            stop().join()
+            decryptStop().join()
             async(UI) {
-                binding.tvProgress.text = "完成"
-                binding.btnDecrypt.text = "开始"
+                binding.tvProgress.textResource = R.string.finish
+                binding.btnDecrypt.textResource = R.string.decrypt
                 Unit
             }.join()
             Log.e(TAG, "结束 ${System.currentTimeMillis()}")
             Unit
         }
-        job = decrypt
+        decryptJob = decrypt
         Log.e(TAG, "完成: ${decrypt.await()}")
 
 
@@ -243,7 +241,7 @@ class MainActivity : AppCompatActivity() {
                 val progress = readSize / length
                 timer.add(progress)
                 if (count == 0) {
-                    val format = bufferConvert.sliceArray(0 until flacFormat.size)
+                    val format = bufferConvert.apply { if (size < flacFormat.size) this else sliceArray(0 until flacFormat.size) }
                     val isFalc = format.contentEquals(flacFormat)
                     if (isFalc) {
                         fileName.format = suffixFlac
@@ -286,6 +284,7 @@ class MainActivity : AppCompatActivity() {
             setField(FieldKey.TITLE, title)
             setField(FieldKey.ARTIST, artist)
             setField(FieldKey.ALBUM, album)
+            //setField(StandardArtwork.createArtworkFromFile())
             val yearTag = createField(FieldKey.YEAR, year)
             //Log.e(TAG, "yearID: ${yearTag.id} $year")
             if (!hasField(yearTag.id)) setField(yearTag)
@@ -345,7 +344,7 @@ class MainActivity : AppCompatActivity() {
         //val md5 = md5Name.substring(0 until md5Name.indexOf('.'))
         val titleSplit = md5Name.split('.')
         val md5 = titleSplit[0]
-        val suffix = titleSplit[1]
+        val suffix = titleSplit.getOrElse(1, { "" })
         Log.e(TAG, "id: $id, $br, $md5Name, $name")
         //Log.e(TAG, "md5: ${titleSplit[0]}, ${titleSplit[1]}, ${titleSplit[2]}")
         FileName(file, id, br, md5, suffix)

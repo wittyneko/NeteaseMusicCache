@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">NeteaseMusicCache</string>
+    <string name="cancel">取消</string>
+    <string name="cancel_await">等待取消</string>
+    <string name="start">开始</string>
+    <string name="finish">完成</string>
+    <string name="decrypt">转码</string>
+    <string name="cover">封面</string>
 </resources>
