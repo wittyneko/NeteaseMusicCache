@@ -1,12 +1,13 @@
 package org.jaudiotagger.tag.images;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.media.Image;
+
 import org.jaudiotagger.tag.id3.valuepair.ImageFormats;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageWriter;
-import java.awt.*;
-import java.awt.geom.AffineTransform;
-import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Iterator;
@@ -42,8 +43,10 @@ public class StandardImageHandler implements ImageHandler
     {
         while(artwork.getBinaryData().length > maxSize)
         {
-            Image srcImage = (Image)artwork.getImage();
-            int w = srcImage.getWidth(null);
+//            Image srcImage = (Image)artwork.getImage();
+//            int w = srcImage.getWidth(null);
+            Bitmap srcImage = (Bitmap) artwork.getImage();
+            int w = srcImage.getWidth();
             int newSize = w /2;
             makeSmaller(artwork,newSize);
         }
@@ -56,10 +59,14 @@ public class StandardImageHandler implements ImageHandler
       */
     public void makeSmaller(Artwork artwork,int size) throws IOException
     {
-        Image srcImage = (Image)artwork.getImage();
+//        Image srcImage = (Image)artwork.getImage();
+//
+//        int w = srcImage.getWidth(null);
+//        int h = srcImage.getHeight(null);
+        Bitmap srcImage = (Bitmap)artwork.getImage();
 
-        int w = srcImage.getWidth(null);
-        int h = srcImage.getHeight(null);
+        int w = srcImage.getWidth();
+        int h = srcImage.getHeight();
 
         // Determine the scaling required to get desired result.
         float scaleW = (float) size / (float) w;
@@ -67,32 +74,43 @@ public class StandardImageHandler implements ImageHandler
 
         //Create an image buffer in which to paint on, create as an opaque Rgb type image, it doesnt matter what type
         //the original image is we want to convert to the best type for displaying on screen regardless
-        BufferedImage bi = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
-
-        // Set the scale.
-        AffineTransform tx = new AffineTransform();
-        tx.scale(scaleW, scaleH);
-
-        // Paint image.
-        Graphics2D g2d = bi.createGraphics();
-        g2d.drawImage(srcImage, tx, null);
-        g2d.dispose();
+//        BufferedImage bi = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
+//
+//        // Set the scale.
+//        AffineTransform tx = new AffineTransform();
+//        tx.scale(scaleW, scaleH);
+//
+//        // Paint image.
+//        Graphics2D g2d = bi.createGraphics();
+//        g2d.drawImage(srcImage, tx, null);
+//        g2d.dispose();
+        Matrix matrix = new Matrix();
+        matrix.setScale(scaleW, scaleH);
+        Bitmap bi = Bitmap.createBitmap(srcImage, 0, 0, srcImage.getWidth(), srcImage.getHeight(), matrix, true);
 
 
         if(artwork.getMimeType()!=null && isMimeTypeWritable(artwork.getMimeType()))
         {
-            artwork.setBinaryData(writeImage(bi,artwork.getMimeType()));
+//            artwork.setBinaryData(writeImage(bi,artwork.getMimeType()));
+            artwork.setBinaryData(writeImage(bi, artwork.getMimeType()));
         }
         else
         {
-            artwork.setBinaryData(writeImageAsPng(bi));
+//            artwork.setBinaryData(writeImageAsPng(bi));
+            artwork.setBinaryData(writeImageAsPng(srcImage));
         }
     }
 
     public boolean isMimeTypeWritable(String mimeType)
     {
-        Iterator<ImageWriter> writers =  ImageIO.getImageWritersByMIMEType(mimeType);
-        return writers.hasNext();
+//        Iterator<ImageWriter> writers =  ImageIO.getImageWritersByMIMEType(mimeType);
+//        return writers.hasNext();
+        switch (mimeType) {
+            case ImageFormats.MIME_TYPE_JPG:
+            case ImageFormats.MIME_TYPE_JPEG:
+                return true;
+        }
+        return false;
     }
     /**
      *  Write buffered image as required format
@@ -104,16 +122,19 @@ public class StandardImageHandler implements ImageHandler
      */
     public byte[] writeImage(Object bi,String mimeType) throws IOException
     {
-        Iterator<ImageWriter> writers =  ImageIO.getImageWritersByMIMEType(mimeType);
-        if(writers.hasNext())
-        {
-            ImageWriter writer = writers.next();
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            writer.setOutput(ImageIO.createImageOutputStream(baos));
-            writer.write((BufferedImage)bi);
-            return baos.toByteArray();
-        }
-        throw new IOException("Cannot write to this mimetype");
+//        Iterator<ImageWriter> writers =  ImageIO.getImageWritersByMIMEType(mimeType);
+//        if(writers.hasNext())
+//        {
+//            ImageWriter writer = writers.next();
+//            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+//            writer.setOutput(ImageIO.createImageOutputStream(baos));
+//            writer.write(bi);
+//            return baos.toByteArray();
+//        }
+//        throw new IOException("Cannot write to this mimetype");
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ((Bitmap)bi).compress(Bitmap.CompressFormat.JPEG, 80, baos);
+        return baos.toByteArray();
     }
 
     /**
@@ -125,7 +146,8 @@ public class StandardImageHandler implements ImageHandler
     public byte[] writeImageAsPng(Object bi) throws IOException
     {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        ImageIO.write((BufferedImage)bi, ImageFormats.MIME_TYPE_PNG,baos);
+        //ImageIO.write(bi, ImageFormats.MIME_TYPE_PNG,baos);
+        ((Bitmap)bi).compress(Bitmap.CompressFormat.PNG, 80, baos);
         return baos.toByteArray();
     }
 
@@ -142,11 +164,11 @@ public class StandardImageHandler implements ImageHandler
      */
     public void showReadFormats()
     {
-         String[] formats = ImageIO.getReaderMIMETypes();
-        for(String f:formats)
-        {
-            System.out.println("r"+f);
-        }
+//         String[] formats = ImageIO.getReaderMIMETypes();
+//        for(String f:formats)
+//        {
+//            System.out.println("r"+f);
+//        }
     }
 
     /**
@@ -156,10 +178,10 @@ public class StandardImageHandler implements ImageHandler
      */
     public void showWriteFormats()
     {
-         String[] formats = ImageIO.getWriterMIMETypes();
-        for(String f:formats)
-        {
-            System.out.println(f);
-        }
+//         String[] formats = ImageIO.getWriterMIMETypes();
+//        for(String f:formats)
+//        {
+//            System.out.println(f);
+//        }
     }
 }

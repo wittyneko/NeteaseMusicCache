@@ -1,12 +1,12 @@
 package org.jaudiotagger.tag.images;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+
 import org.jaudiotagger.audio.flac.metadatablock.MetadataBlockDataPicture;
 import org.jaudiotagger.tag.id3.valuepair.ImageFormats;
 import org.jaudiotagger.tag.reference.PictureTypes;
 
-import javax.imageio.ImageIO;
-import javax.imageio.stream.ImageInputStream;
-import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -79,7 +79,8 @@ public class StandardArtwork implements Artwork
     {
         try
         {
-            BufferedImage image = (BufferedImage)getImage();
+//            BufferedImage image = (BufferedImage)getImage();
+            Bitmap image = (Bitmap) getImage();
             setWidth(image.getWidth());
             setHeight(image.getHeight());
         }
