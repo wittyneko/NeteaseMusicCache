@@ -92,9 +92,7 @@ public class StandardArtwork implements Artwork
 
     public Object getImage() throws IOException
     {
-        ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(getBinaryData()));
-        BufferedImage bi = ImageIO.read(iis);
-        return bi;
+        return ImageHandlingFactory.getInstance().getImage(getBinaryData());
     }
 
     public boolean isLinked()
@@ -189,7 +187,7 @@ public class StandardArtwork implements Artwork
     {
         setMimeType(coverArt.getMimeType());
         setDescription(coverArt.getDescription());
-        setPictureType(coverArt.getPictureType());       
+        setPictureType(coverArt.getPictureType());
         if(coverArt.isImageUrl())
         {
             setLinked(coverArt.isImageUrl());

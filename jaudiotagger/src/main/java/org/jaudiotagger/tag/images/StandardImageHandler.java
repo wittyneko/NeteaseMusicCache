@@ -102,7 +102,7 @@ public class StandardImageHandler implements ImageHandler
      * @return
      * @throws IOException
      */
-    public byte[] writeImage(BufferedImage bi,String mimeType) throws IOException
+    public byte[] writeImage(Object bi,String mimeType) throws IOException
     {
         Iterator<ImageWriter> writers =  ImageIO.getImageWritersByMIMEType(mimeType);
         if(writers.hasNext())
@@ -110,7 +110,7 @@ public class StandardImageHandler implements ImageHandler
             ImageWriter writer = writers.next();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             writer.setOutput(ImageIO.createImageOutputStream(baos));
-            writer.write(bi);
+            writer.write((BufferedImage)bi);
             return baos.toByteArray();
         }
         throw new IOException("Cannot write to this mimetype");
@@ -122,11 +122,17 @@ public class StandardImageHandler implements ImageHandler
      * @return
      * @throws IOException
      */
-    public byte[] writeImageAsPng(BufferedImage bi) throws IOException
+    public byte[] writeImageAsPng(Object bi) throws IOException
     {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        ImageIO.write(bi, ImageFormats.MIME_TYPE_PNG,baos);
+        ImageIO.write((BufferedImage)bi, ImageFormats.MIME_TYPE_PNG,baos);
         return baos.toByteArray();
+    }
+
+    @Override
+    public Object getImage(byte[] bytes) {
+//        return ImageIO.read(new ByteArrayInputStream(getRawImageData()));
+        return BitmapFactory.decodeStream(new ByteArrayInputStream(bytes));
     }
 
     /**
