@@ -1,5 +1,7 @@
 package org.jaudiotagger.tag.images;
 
+import android.graphics.Bitmap;
+
 import org.jaudiotagger.audio.flac.metadatablock.MetadataBlockDataPicture;
 import org.jaudiotagger.tag.id3.valuepair.ImageFormats;
 import org.jaudiotagger.tag.reference.PictureTypes;
@@ -73,12 +75,22 @@ public class AndroidArtwork implements Artwork
      */
     public boolean setImageFromData()
     {
-        throw new UnsupportedOperationException();
+        try
+        {
+            Bitmap image = (Bitmap) getImage();
+            setWidth(image.getWidth());
+            setHeight(image.getHeight());
+        }
+        catch(IOException ioe)
+        {
+            return false;
+        }
+        return true;
     }
 
     public Object getImage() throws IOException
     {
-        throw new UnsupportedOperationException();
+        return ImageHandlingFactory.getInstance().getImage(getBinaryData());
     }
 
     public boolean isLinked()
