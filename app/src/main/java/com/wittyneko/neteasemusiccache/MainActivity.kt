@@ -1,12 +1,11 @@
 package com.wittyneko.neteasemusiccache
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.databinding.DataBindingUtil
 import android.graphics.Color
+import android.os.*
 import android.support.v7.app.AppCompatActivity
-import android.os.Bundle
-import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import android.support.v7.widget.RecyclerView
 import android.util.Log
 import android.view.View
@@ -17,12 +16,13 @@ import com.google.gson.JsonObject
 import com.wittyneko.neteasemusiccache.databinding.ActivityMainBinding
 import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.android.UI
-import okhttp3.OkHttpClient
+import okhttp3.*
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.anko.backgroundColor
 import org.jetbrains.anko.sdk25.coroutines.onClick
 import org.jetbrains.anko.textResource
+import org.jetbrains.anko.toast
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.*
@@ -38,6 +38,7 @@ class MainActivity : AppCompatActivity() {
     lateinit var binding: ActivityMainBinding
     val adapter = Adapter()
     val handler = Handler(Looper.getMainLooper())
+    val PERMISSION_REQUEST = 110
 
     val dateFormat = SimpleDateFormat("yyyy")
 
@@ -48,21 +49,28 @@ class MainActivity : AppCompatActivity() {
     val flacFormat = byteArrayOf(0x66, 0x4C, 0x61, 0x43, 0x00, 0x00, 0x00, 0x22)
     var decryptJob: Job? = null
 
+    val client = OkHttpClient.Builder()
+            .retryOnConnectionFailure(true)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .build()
     val apiRetrofit = Retrofit.Builder()
-            .client(OkHttpClient.Builder()
-                    .retryOnConnectionFailure(true)
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .build())
+            .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .baseUrl(baseUrl)
             .build()
     val cacheMap = hashMapOf<String, Pair<String, String>>()
 
+    val externalStorageDirectory = Environment.getExternalStorageDirectory()
+    val inputDir = File(externalStorageDirectory, "netease/cloudmusic/Cache/Music1")
+    val cacheLyricDir = File(externalStorageDirectory, "netease/cloudmusic/Cache/Lyric")
+
     val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
     val neteaseDir = File(musicDir, "netease")
-    lateinit var cacheFile: File
-    lateinit var inputPath: String
-    lateinit var outputPath: String
+    val neteaseCacheDir = File(neteaseDir, "cache")
+    val neteaseCoverDir = File(neteaseDir, "cover")
+    val neteaseLyricDir = File(neteaseDir, "lyric")
+    val neteaseMusicDir = File(neteaseDir, "music")
+    val cacheFile = File(neteaseDir, "cache.txt")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,12 +95,18 @@ class MainActivity : AppCompatActivity() {
                 decryptLaunch()
             }
         }
+
         init()
 
         //decryptLaunch()
     }
 
     fun init() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), PERMISSION_REQUEST)
+            }
+        }
         // 异常处理
         val catchHandler = object : Thread.UncaughtExceptionHandler {
             val defHandler = Thread.getDefaultUncaughtExceptionHandler()
@@ -103,12 +117,20 @@ class MainActivity : AppCompatActivity() {
 
         }
         Thread.setDefaultUncaughtExceptionHandler(catchHandler)
-        inputPath = "${Environment.getExternalStorageDirectory().absolutePath}/netease/cloudmusic/Cache/Music1"
-        outputPath = "${neteaseDir.absolutePath}/cache"
-        cacheFile = File(neteaseDir, "cache.txt")
         Log.e(TAG, "${musicDir.absolutePath}\n" +
                 "${neteaseDir.absolutePath}\n" +
+                "${neteaseCacheDir.absolutePath}\n" +
+                "${neteaseCoverDir.absolutePath}\n" +
+                "${neteaseLyricDir.absolutePath}\n" +
+                "${neteaseMusicDir.absolutePath}\n" +
                 "${cacheFile.absolutePath}")
+    }
+
+    fun mkdirs() {
+        neteaseCacheDir.mkdirs()
+        neteaseCoverDir.mkdirs()
+        neteaseLyricDir.mkdirs()
+        neteaseMusicDir.mkdirs()
     }
 
     fun decryptStop() = async {
@@ -127,6 +149,22 @@ class MainActivity : AppCompatActivity() {
         // 获取已解析列表
         async {
             cacheMap.clear()
+            // Plan A
+            neteaseCacheDir.listFiles { file ->
+                val name = file.name.toLowerCase()
+                //arrayListOf(".flac", ".mp3")
+                name.endsWith(".flac") || name.endsWith(".mp3")
+            }.forEach { file ->
+                val fileName = parseFile(file)
+                Log.e(TAG, "file: $file")
+                cacheMap[fileName.id]?.let {
+                    if (fileName.br.toInt() > it.first.toInt()) {
+                        cacheMap.put(fileName.id, Pair(fileName.br, fileName.md5))
+                    }
+                } ?: run { cacheMap.put(fileName.id, Pair(fileName.br, fileName.md5)) }
+            }
+
+            // Plan B
             if (cacheFile.exists()) {
                 cacheFile.forEachLine {
                     //Log.e(TAG, "read: $it")
@@ -135,7 +173,13 @@ class MainActivity : AppCompatActivity() {
                     val id = listSplit[0]
                     val br = listSplit[1]
                     var md5 = listSplit[2]
-                    cacheMap.put(id, Pair(br, md5))
+                    cacheMap[id]?.let {
+                        if (br.toInt() > it.first.toInt()) {
+                            cacheMap.put(id, Pair(br, md5))
+                        }
+                    } ?: run {
+                        cacheMap.put(id, Pair(br, md5))
+                    }
                 }
             }
         }.join()
@@ -143,8 +187,7 @@ class MainActivity : AppCompatActivity() {
         // 获取缓存列表
         val cacheFileList = async {
 
-            val music = File(inputPath)
-            val musicFile = music.listFiles { dir, name ->
+            val musicFile = inputDir.listFiles { dir, name ->
                 //Log.e(TAG, "$name, $dir")
                 name.endsWith("uc!", true)
             }
@@ -170,15 +213,15 @@ class MainActivity : AppCompatActivity() {
                     Log.e(TAG, "response: ${response?.body().toString()}")
                     val json = Gson().fromJson(response.body(), SongDetail::class.java)
                     val song = json.songs[0]
-                    val tille = song.name
+                    val title = song.name
                     val artist = song.ar.joinToString("/") { it.name }
                     val album = song.al.name
                     val cover = song.al.picUrl
                     val year = dateFormat.format(Date(song.publishTime))
-                    setAudioTag(file, tille, artist, album, year)
+                    setAudioTag(file, title, artist, album, year)
                     cacheMap.put(fileName.id, Pair(fileName.br, fileName.md5))
                     showInfo(">. 写入作品信息 \n" +
-                            "title: $tille \n" +
+                            "title: $title \n" +
                             "artist: $artist \n" +
                             "album: $album \n" +
                             "year: $year"
@@ -209,9 +252,8 @@ class MainActivity : AppCompatActivity() {
         //val name = fileName.file.name
         //val outputName = name.substring(0 until name.lastIndexOf('.'))
         val outputName = "${fileName.id}-${fileName.br}-${fileName.md5}"
-        val outputFile = File(outputPath, outputName)
+        val outputFile = File(neteaseCacheDir, outputName)
 
-        outputFile.parentFile?.mkdirs()
         outputFile.apply { if (exists()) delete() }
         outputFile.outputStream().use { output ->
             val length = inputFile.length().toDouble()
@@ -241,7 +283,7 @@ class MainActivity : AppCompatActivity() {
                 val progress = readSize / length
                 timer.add(progress)
                 if (count == 0) {
-                    val format = bufferConvert.apply { if (size < flacFormat.size) this else sliceArray(0 until flacFormat.size) }
+                    val format = bufferConvert.run { if (size < flacFormat.size) this else sliceArray(0 until flacFormat.size) }
                     val isFalc = format.contentEquals(flacFormat)
                     if (isFalc) {
                         fileName.format = suffixFlac
@@ -362,6 +404,17 @@ class MainActivity : AppCompatActivity() {
             block()
         } else {
             handler.post { block() }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST) {
+            if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                toast("权限获取失败")
+            } else {
+                mkdirs()
+            }
         }
     }
 
