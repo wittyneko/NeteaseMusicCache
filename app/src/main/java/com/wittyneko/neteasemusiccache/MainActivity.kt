@@ -19,6 +19,10 @@ import kotlinx.coroutines.experimental.android.UI
 import okhttp3.*
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
+import org.jaudiotagger.tag.TagOptionSingleton
+import org.jaudiotagger.tag.flac.FlacTag
+import org.jaudiotagger.tag.id3.AbstractID3v2Tag
+import org.jaudiotagger.tag.images.StandardArtwork
 import org.jetbrains.anko.backgroundColor
 import org.jetbrains.anko.sdk25.coroutines.onClick
 import org.jetbrains.anko.textResource
@@ -48,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     val suffixFlac = "flac"
     val flacFormat = byteArrayOf(0x66, 0x4C, 0x61, 0x43, 0x00, 0x00, 0x00, 0x22)
     var decryptJob: Job? = null
+    var coveJob: Job? = null
 
     val client = OkHttpClient.Builder()
             .retryOnConnectionFailure(true)
@@ -96,6 +101,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnCover.onClick {
+            if (coveJob != null && coveJob!!.isActive) {
+
+                binding.btnCover.textResource = R.string.cancel_await
+                binding.btnCover.isEnabled = false
+                coveJob?.cancelAndJoin()
+                binding.btnCover.textResource = R.string.cover
+                binding.btnCover.isEnabled = true
+            } else {
+                binding.tvProgress.text = ""
+                adapter.clear()
+                coverLaunch()
+            }
+        }
+
         init()
 
         //decryptLaunch()
@@ -124,6 +144,7 @@ class MainActivity : AppCompatActivity() {
                 "${neteaseLyricDir.absolutePath}\n" +
                 "${neteaseMusicDir.absolutePath}\n" +
                 "${cacheFile.absolutePath}")
+        TagOptionSingleton.getInstance().isAndroid = true
     }
 
     fun mkdirs() {
@@ -131,6 +152,93 @@ class MainActivity : AppCompatActivity() {
         neteaseCoverDir.mkdirs()
         neteaseLyricDir.mkdirs()
         neteaseMusicDir.mkdirs()
+    }
+
+    fun coverLaunch() = launch(UI) {
+        binding.btnCover.textResource = R.string.cancel
+
+        val deferred = async {
+            // 获取缓存列表
+            val musicFiles = neteaseCacheDir.listFiles()
+            showInfo("开始 ${System.currentTimeMillis()}")
+            musicFiles.forEach {
+                val fileName = parseFile(it)
+                showInfo(">. 检测文件 \n${fileName.file.name}")
+
+                val audio = AudioFileIO.read(fileName.file)
+                val header = audio.audioHeader
+                Log.e(TAG, "format: ${header.format}")
+                val tag = audio.tag
+
+                val isCover = if (tag is FlacTag) {
+                    tag.images.isNotEmpty()
+                } else if (tag is AbstractID3v2Tag) {
+                    tag.artworkList.isNotEmpty()
+                } else {
+                    false
+                }
+                if (!isCover) {
+                    // 下载封面
+                    showInfo(">. 获取封面信息")
+                    val response = getName(fileName)
+                    Log.e(TAG, "response: ${response?.body().toString()}")
+                    val json = Gson().fromJson(response.body(), SongDetail::class.java)
+                    val song = json.songs[0]
+                    val cover = song.al.picUrl
+                    val file = File(neteaseCoverDir, "${fileName.id}-${fileName.br}-${fileName.md5}${cover.run { substring(lastIndexOf('.')) }}")
+                    file.apply { if (exists()) delete() }
+
+
+                    val timer = Timer(0.0, 60) { time, pair ->
+                        async(UI) {
+                            //binding.tvProgress.text = "${String.format("%.2f", pair.second * 100)} %"
+                            binding.tvProgress.text = "进度: ${(pair.second * 100).roundToInt()} %"
+                        }
+                    }
+
+                    val coverResponses = client.newCall(Request.Builder().url(cover).build()).execute()
+                    ProgressResponseBody(coverResponses.body()!!) { bytesRead, contentLength, done ->
+
+                        val progress = bytesRead / contentLength.toDouble()
+                        timer.add(progress)
+                    }.source().inputStream().use { input ->
+                        writeFile(input, file)
+                    }
+
+                    tag.setField(StandardArtwork.createArtworkFromFile(file))
+                    showInfo(">. 写入封面 \n" +
+                            "cover: $cover"
+                    )
+
+                } else {
+                    showInfo("已有封面")
+                }
+                audio.commit()
+                tag.fields.forEach {
+                    Log.e(TAG, "tag: ${it.id}, ${tag.getFirst(it.id)}")
+                }
+                if (tag is FlacTag) {
+                    tag.images.forEach {
+                        Log.e(TAG, "imgFlac: $it")
+                    }
+                } else if (tag is AbstractID3v2Tag) {
+                    tag.artworkList.forEach {
+                        Log.e(TAG, "imgID3: ${it.imageUrl}, $it")
+                    }
+                }
+
+                showInfo("------------------------").join()
+            }
+            async(UI) {
+                binding.tvProgress.textResource = R.string.finish
+                binding.btnCover.textResource = R.string.cover
+                Unit
+            }.join()
+            Log.e(TAG, "结束 ${System.currentTimeMillis()}")
+            Unit
+        }
+        coveJob = deferred
+        Log.e(TAG, "完成: ${deferred.await()}")
     }
 
     fun decryptStop() = async {
