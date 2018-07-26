@@ -1,1 +1,1 @@
-include ':app', ':jaudiotagger'
+include ':app'
