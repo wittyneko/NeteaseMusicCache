@@ -69,6 +69,18 @@
                     android:layout_height="wrap_content"
                     android:text="@string/cover"/>
 
+                <Button
+                    android:id="@+id/btn_lyric"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lyric"/>
+
+                <Button
+                    android:id="@+id/btn_rename"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/rename"/>
+
             </LinearLayout>
 
         </HorizontalScrollView>

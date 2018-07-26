@@ -6,4 +6,6 @@
     <string name="finish">完成</string>
     <string name="decrypt">转码</string>
     <string name="cover">封面</string>
+    <string name="lyric">歌词</string>
+    <string name="rename">重命名</string>
 </resources>

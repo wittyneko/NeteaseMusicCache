@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
 import com.wittyneko.neteasemusiccache.databinding.ActivityMainBinding
 import kotlinx.coroutines.experimental.*
@@ -53,6 +54,7 @@ class MainActivity : AppCompatActivity() {
     val flacFormat = byteArrayOf(0x66, 0x4C, 0x61, 0x43, 0x00, 0x00, 0x00, 0x22)
     var decryptJob: Job? = null
     var coveJob: Job? = null
+    var lyricJob: Job? = null
 
     val client = OkHttpClient.Builder()
             .retryOnConnectionFailure(true)
@@ -116,6 +118,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnLyric.onClick {
+            if (lyricJob != null && lyricJob!!.isActive) {
+
+                binding.btnLyric.textResource = R.string.cancel_await
+                binding.btnLyric.isEnabled = false
+                lyricJob?.cancelAndJoin()
+                binding.btnLyric.textResource = R.string.lyric
+                binding.btnLyric.isEnabled = true
+            } else {
+                binding.tvProgress.text = ""
+                adapter.clear()
+                lyricLaunch()
+            }
+        }
+
         init()
 
         //decryptLaunch()
@@ -152,6 +169,72 @@ class MainActivity : AppCompatActivity() {
         neteaseCoverDir.mkdirs()
         neteaseLyricDir.mkdirs()
         neteaseMusicDir.mkdirs()
+    }
+
+    fun lyricLaunch() = launch(UI) {
+        binding.btnLyric.textResource = R.string.cancel
+
+        val deferred = async {
+            // 获取缓存列表
+            val musicFiles = neteaseMusicDir.listFiles()
+            showInfo("开始 ${System.currentTimeMillis()}")
+            musicFiles.forEach {
+                val fileName = parseFile(it)
+                showInfo(">. 检测文件 \n${fileName.file.name}")
+
+                val audio = AudioFileIO.read(fileName.file)
+                val header = audio.audioHeader
+                Log.e(TAG, "format: ${header.format}")
+                val tag = audio.tag
+
+                val isLyric = tag.hasField(FieldKey.LYRICS)
+                if (!isLyric) {
+                    // 下载封面
+                    showInfo(">. 获取歌词信息")
+                    val response = apiRetrofit.create(ApiInterface::class.java)
+                            .getLyric(fileName.id)
+                            .execute()
+                    Log.e(TAG, "response: ${response?.body().toString()}")
+                    val json = GsonBuilder().setPrettyPrinting().create().fromJson(response.body(), SongLyric::class.java)
+                    val lrc = json.lrc.lyric
+                    val file = File(neteaseCoverDir, "${fileName.id}-${fileName.br}-${fileName.md5}.lrc")
+                    file.apply { if (exists()) delete() }
+                    file.writeText(lrc)
+                    //tag.addField(FieldKey.LYRICS, lrc)
+
+                    showInfo(">. 写入歌词 \n" +
+                            "cover: $lrc"
+                    )
+
+                } else {
+                    showInfo("已有歌词")
+                }
+                //audio.commit()
+                tag.fields.forEach {
+                    Log.e(TAG, "tag: ${it.id}, ${tag.getFirst(it.id)}")
+                }
+                if (tag is FlacTag) {
+                    tag.images.forEach {
+                        Log.e(TAG, "imgFlac: $it")
+                    }
+                } else if (tag is AbstractID3v2Tag) {
+                    tag.artworkList.forEach {
+                        Log.e(TAG, "imgID3: ${it.imageUrl}, $it")
+                    }
+                }
+
+                showInfo("------------------------").join()
+            }
+            async(UI) {
+                binding.tvProgress.textResource = R.string.finish
+                binding.btnLyric.textResource = R.string.lyric
+                Unit
+            }.join()
+            Log.e(TAG, "结束 ${System.currentTimeMillis()}")
+            Unit
+        }
+        lyricJob = deferred
+        Log.e(TAG, "完成: ${deferred.await()}")
     }
 
     fun coverLaunch() = launch(UI) {
@@ -498,6 +581,22 @@ class MainActivity : AppCompatActivity() {
         Log.e(TAG, "id: $id, $br, $md5Name, $name")
         //Log.e(TAG, "md5: ${titleSplit[0]}, ${titleSplit[1]}, ${titleSplit[2]}")
         FileName(file, id, br, md5, suffix)
+    }
+
+    fun parseName(name: String) =run {
+
+        val listSplit = name.split('-')
+        //val id = name.substring(0 until name.indexOfFirst { it == '-' })
+        val id = listSplit[0]
+        val br = listSplit[1]
+        var md5Name = listSplit[2]
+        //val md5 = md5Name.substring(0 until md5Name.indexOf('.'))
+        val titleSplit = md5Name.split('.')
+        val md5 = titleSplit[0]
+        val suffix = titleSplit.getOrElse(1, { "" })
+        Log.e(TAG, "id: $id, $br, $md5Name, $name")
+        //Log.e(TAG, "md5: ${titleSplit[0]}, ${titleSplit[1]}, ${titleSplit[2]}")
+        FileName(File(""), id, br, md5, suffix)
     }
 
     @Suppress("NOTHING_TO_INLINE")
