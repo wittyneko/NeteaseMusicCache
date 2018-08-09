@@ -23,7 +23,8 @@ import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.TagOptionSingleton
 import org.jaudiotagger.tag.flac.FlacTag
 import org.jaudiotagger.tag.id3.AbstractID3v2Tag
-import org.jaudiotagger.tag.images.StandardArtwork
+import org.jaudiotagger.tag.id3.TyerTdatAggregatedFrame
+import org.jaudiotagger.tag.images.ArtworkFactory
 import org.jetbrains.anko.backgroundColor
 import org.jetbrains.anko.sdk25.coroutines.onClick
 import org.jetbrains.anko.textResource
@@ -288,7 +289,7 @@ class MainActivity : AppCompatActivity() {
                         writeFile(input, file)
                     }
 
-                    tag.setField(StandardArtwork.createArtworkFromFile(file))
+                    tag.setField(ArtworkFactory.getNew().apply { setFromFile(file) })
                     showInfo(">. 写入封面 \n" +
                             "cover: $cover"
                     )
@@ -298,7 +299,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 audio.commit()
                 tag.fields.forEach {
-                    Log.e(TAG, "tag: ${it.id}, ${tag.getFirst(it.id)}")
+                    if (TyerTdatAggregatedFrame.ID_TYER_TDAT != it.id)
+                        Log.e(TAG, "tag: ${it.id}, ${tag.getFirst(it.id)}")
                 }
                 if (tag is FlacTag) {
                     tag.images.forEach {
